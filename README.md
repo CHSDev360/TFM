@@ -1,10 +1,4 @@
-# 📘 README - Aplicación TFM
-
-## 🚀 Descripción
-
-Esta es una aplicación desarrollada con Streamlit que utiliza scraping web con Selenium y procesamiento de datos con Pandas.
-
----
+# 📘 README - Aplicación Streamlit
 
 ## 📦 Requisitos previos
 
@@ -13,6 +7,13 @@ Antes de comenzar, asegúrate de tener instalado:
 * Python 3.8 o superior
 * Visual Studio Code
 * pip
+* Ollama con el modelo `qwen3.5:4b` descargado
+
+Para instalar Ollama y descargar el modelo:
+
+```bash
+ollama pull qwen3.5:4b
+```
 
 ---
 
@@ -21,28 +22,6 @@ Antes de comenzar, asegúrate de tener instalado:
 1. Abre Visual Studio Code
 2. Ve a **File > Open Folder**
 3. Selecciona la carpeta del proyecto
-
----
-
-## 🧪 Crear entorno virtual (opcional pero recomendado)
-
-```bash
-python -m venv venv
-```
-
-Activar entorno:
-
-* Windows:
-
-```bash
-venv\Scripts\activate
-```
-
-* Mac/Linux:
-
-```bash
-source venv/bin/activate
-```
 
 ---
 
@@ -83,3 +62,4 @@ Esto abrirá automáticamente la app en tu navegador.
 
 * Asegúrate de tener Google Chrome instalado para que Selenium funcione correctamente.
 * `webdriver-manager` descargará automáticamente el driver necesario.
+* Verifica que Ollama esté en ejecución antes de iniciar la aplicación.
