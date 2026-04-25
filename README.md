@@ -6,7 +6,6 @@ Antes de comenzar, asegúrate de tener instalado:
 
 * Python 3.8 o superior
 * Visual Studio Code
-* pip
 * Ollama con el modelo `qwen3.5:4b` descargado
 
 Para instalar Ollama y descargar el modelo:
