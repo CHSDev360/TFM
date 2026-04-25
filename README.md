@@ -1,22 +1,85 @@
-# TFM - Aplicación Streamlit
+# 📘 README - Aplicación TFM
 
-Este proyecto es una aplicación desarrollada en Python que utiliza **Streamlit** para la interfaz de usuario, **Selenium** para la automatización del navegador, y otras librerías como **Pandas** y **Ollama** para el procesamiento de datos y lógica.
+## 🚀 Descripción
 
-## 📋 Prerrequisitos
+Esta es una aplicación desarrollada con Streamlit que utiliza scraping web con Selenium y procesamiento de datos con Pandas.
 
-Asegúrate de tener lo siguiente instalado en tu sistema:
+---
 
-- **Python 3.8 o superior**: Puedes descargarlo desde [python.org](https://www.python.org/).
-- **Visual Studio Code** (opcional, pero recomendado para la edición y ejecución).
-- **Google Chrome**: Necesario para que Selenium funcione correctamente.
+## 📦 Requisitos previos
 
-## 🚀 Instalación
+Antes de comenzar, asegúrate de tener instalado:
 
-Sigue estos pasos para configurar el entorno y ejecutar el proyecto:
+* Python 3.8 o superior
+* Visual Studio Code
+* pip
 
-### 1. Clonar o descargar el repositorio
-Si estás usando Git, clona el repositorio. Si no, asegúrate de tener el archivo `app_new.py` en tu carpeta local.
+---
+
+## 📂 Abrir el proyecto en Visual Studio Code
+
+1. Abre Visual Studio Code
+2. Ve a **File > Open Folder**
+3. Selecciona la carpeta del proyecto
+
+---
+
+## 🧪 Crear entorno virtual (opcional pero recomendado)
 
 ```bash
-git clone <URL_DE_TU_REPOSITORIO>
-cd <NOMBRE_DE_LA_CARPETA>
+python -m venv venv
+```
+
+Activar entorno:
+
+* Windows:
+
+```bash
+venv\Scripts\activate
+```
+
+* Mac/Linux:
+
+```bash
+source venv/bin/activate
+```
+
+---
+
+## 📥 Instalación de dependencias
+
+Ejecuta en la terminal:
+
+```bash
+pip install streamlit pandas ollama beautifulsoup4 selenium webdriver-manager
+```
+
+---
+
+## ▶️ Ejecutar la aplicación
+
+En la terminal, dentro del proyecto:
+
+```bash
+streamlit run app.py
+```
+
+Esto abrirá automáticamente la app en tu navegador.
+
+---
+
+## 🧰 Librerías utilizadas
+
+* Streamlit → interfaz web
+* Pandas → manejo de datos
+* BeautifulSoup → scraping HTML
+* Selenium → automatización web
+* webdriver-manager → gestión de drivers
+* Ollama → integración con modelos
+
+---
+
+## ⚠️ Notas
+
+* Asegúrate de tener Google Chrome instalado para que Selenium funcione correctamente.
+* `webdriver-manager` descargará automáticamente el driver necesario.
