@@ -29,7 +29,7 @@ ollama pull qwen3.5:4b
 Ejecuta en la terminal:
 
 ```bash
-pip install streamlit pandas ollama beautifulsoup4 selenium webdriver-manager
+pip install streamlit pandas ollama beautifulsoup4 selenium webdriver-manager reportlab
 ```
 
 ---
