@@ -54,7 +54,7 @@ Esto abrirá automáticamente la app en tu navegador.
 * Selenium → automatización web
 * webdriver-manager → gestión de drivers
 * Ollama → integración con modelos
-
+* reportlab → Generacion de pdfs
 ---
 
 ## ⚠️ Notas
