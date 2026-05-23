@@ -436,7 +436,7 @@ Todas las respuestas deben seguir estrictamente este formato estándar:
 
 
 def crear_prompt_json(contenido):
-    """Prompt para Ollama — respuesta en JSON estructurado."""
+    """Prompt — respuesta en JSON estructurado."""
     return f"""
 Analista de seguridad web: detecta vulnerabilidades en el contenido HTML/JS proporcionado.
 
@@ -464,7 +464,7 @@ FORMATO JSON obligatorio:
 ]
 
 REGLAS:
-- Si no hay vulnerabilidades: []
+- Si no hay vulnerabilidades mostrar el siguiente mensaje: No se ha encontrado vulnerabilidades.
 - Máximo 8 resultados
 - Solo JSON válido, sin texto adicional
 
