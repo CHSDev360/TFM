@@ -29,7 +29,7 @@ ollama pull qwen3.5:4b
 Ejecuta en la terminal:
 
 ```bash
-pip install streamlit pandas ollama beautifulsoup4 selenium webdriver-manager
+pip install streamlit pandas ollama beautifulsoup4 selenium webdriver-manager reportlab
 ```
 
 ---
@@ -54,7 +54,7 @@ Esto abrirá automáticamente la app en tu navegador.
 * Selenium → automatización web
 * webdriver-manager → gestión de drivers
 * Ollama → integración con modelos
-
+* reportlab → Generacion de pdfs
 ---
 
 ## ⚠️ Notas
