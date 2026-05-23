@@ -30,23 +30,56 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable,
 from reportlab.lib.enums import TA_CENTER
 
 # ─────────────────────────────────────────────
-# CLIENTES IA
-# ─────────────────────────────────────────────
-openai_client = OpenAI(
-    api_key="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"
-)
-
-deepseek_client = OpenAI(
-    api_key="sk-5d51da9401fa4c3dbb1192ca12e45f41",
-    base_url="https://api.deepseek.com"
-)
-
-# ─────────────────────────────────────────────
 # CONFIG PÁGINA
 # ─────────────────────────────────────────────
 st.set_page_config(page_title="AI Web Vulnerability Scanner", layout="wide")
 st.title("🔐 AI Web Vulnerability Scanner")
 st.write("Analiza webs con IA para detectar vulnerabilidades")
+
+# ─────────────────────────────────────────────
+# BARRA LATERAL — API KEYS
+# ─────────────────────────────────────────────
+with st.sidebar:
+    st.header("🔑 Configuración de API Keys")
+    st.caption("Las claves solo se usan durante la sesión y no se almacenan.")
+
+    openai_api_key = st.text_input(
+        "OpenAI API Key",
+        type="password",
+        placeholder="sk-proj-...",
+        help="Obtén tu clave en platform.openai.com"
+    )
+
+    deepseek_api_key = st.text_input(
+        "DeepSeek API Key",
+        type="password",
+        placeholder="sk-...",
+        help="Obtén tu clave en platform.deepseek.com"
+    )
+
+    st.markdown("---")
+    st.subheader("🦙 Ollama (local)")
+    
+    MODELOS_OLLAMA = [
+        "llama3",
+        "qwen3.5:4b",
+        "mistral",
+        "gemma3:4b",
+        "phi4-mini",
+        "deepseek-r1:7b",
+    ]
+    
+    modelo_ollama = st.selectbox(
+        "Modelo Ollama",
+        MODELOS_OLLAMA,
+        help="Selecciona el modelo local que quieres usar. Asegúrate de haberlo descargado con 'ollama pull <modelo>'."
+    )
+    
+    st.caption(f"Para descargar el modelo seleccionado:")
+    st.code(f"ollama pull {modelo_ollama}", language="bash")
+    
+    st.markdown("---")
+    st.caption("Ollama no requiere API key — se ejecuta localmente.")
 
 # ─────────────────────────────────────────────
 # INPUTS
@@ -454,10 +487,10 @@ def analizar_api(cliente, modelo, contenido):
     return response.choices[0].message.content
 
 
-def analizar_ollama(contenido):
+def analizar_ollama(contenido, modelo="llama3"):
     prompt = crear_prompt_json(contenido)
     response = ollama.chat(
-        model="llama3",
+        model=modelo,
         messages=[{"role": "user", "content": prompt}]
     )
     return response["message"]["content"]
@@ -580,18 +613,53 @@ def generar_pdf(url_analizada, modelo_usado, resultado_texto, con_glosario=False
         # Tabla estructurada para resultados JSON (Ollama)
         columnas = [c for c in ["vulnerabilidad", "nivel", "ubicacion", "descripcion", "evidencia"] if c in df_json.columns]
         encabezados = [c.capitalize() for c in columnas]
-        datos_tabla = [encabezados] + [[str(row[c])[:120] for c in columnas] for _, row in df_json.iterrows()]
-        tabla_vuln = Table(datos_tabla, repeatRows=1, hAlign="LEFT")
+
+        # Ancho útil: A4 (595pt) - márgenes (2*2cm = 113pt) = 482pt
+        ANCHO_UTIL = 482
+
+        # Anchos proporcionales según el tipo de columna
+        anchos_col = {
+            "vulnerabilidad": 0.18,
+            "nivel":          0.10,
+            "ubicacion":      0.15,
+            "descripcion":    0.30,
+            "evidencia":      0.27,
+        }
+        col_widths = [ANCHO_UTIL * anchos_col.get(c, 0.2) for c in columnas]
+
+        # Estilo de celda con wrap para que el texto no se desborde
+        estilo_celda = ParagraphStyle(
+            "CeldaTabla",
+            parent=styles["Normal"],
+            fontSize=7,
+            leading=10,
+            wordWrap="CJK",
+        )
+        estilo_cabecera = ParagraphStyle(
+            "CabecerTabla",
+            parent=styles["Normal"],
+            fontSize=7,
+            leading=10,
+            textColor=colors.white,
+            fontName="Helvetica-Bold",
+        )
+
+        # Construir filas con Paragraph para que hagan wrap automático
+        filas = [[Paragraph(h, estilo_cabecera) for h in encabezados]]
+        for _, row in df_json.iterrows():
+            fila = [Paragraph(str(row[c])[:300], estilo_celda) for c in columnas]
+            filas.append(fila)
+
+        tabla_vuln = Table(filas, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
         tabla_vuln.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1a1a2e")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.HexColor("#f5f5f5"), colors.white]),
-            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#cccccc")),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("BACKGROUND",    (0, 0), (-1, 0),  colors.HexColor("#1a1a2e")),
+            ("ROWBACKGROUNDS",(0, 1), (-1, -1), [colors.HexColor("#f5f5f5"), colors.white]),
+            ("GRID",          (0, 0), (-1, -1), 0.3, colors.HexColor("#cccccc")),
+            ("VALIGN",        (0, 0), (-1, -1), "TOP"),
             ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-            ("TOPPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING",    (0, 0), (-1, -1), 5),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
         ]))
         elementos.append(tabla_vuln)
     else:
@@ -673,7 +741,10 @@ with col1:
     if st.button("Analizar con OpenAI"):
         if not url.strip():
             st.warning("❗ Por favor, introduce un enlace web válido")
+        elif not openai_api_key.strip():
+            st.warning("🔑 Introduce tu OpenAI API Key en la barra lateral para usar este modelo.")
         else:
+            openai_client = OpenAI(api_key=openai_api_key.strip())
             with st.spinner("Extrayendo contenido..."):
                 recursos = obtener_html_selenium(url) if usar_selenium else obtener_html_basico(url)
             if recursos:
@@ -688,7 +759,10 @@ with col2:
     if st.button("Analizar con DeepSeek"):
         if not url.strip():
             st.warning("❗ Por favor, introduce un enlace web válido")
+        elif not deepseek_api_key.strip():
+            st.warning("🔑 Introduce tu DeepSeek API Key en la barra lateral para usar este modelo.")
         else:
+            deepseek_client = OpenAI(api_key=deepseek_api_key.strip(), base_url="https://api.deepseek.com")
             with st.spinner("Extrayendo contenido..."):
                 recursos = obtener_html_selenium(url) if usar_selenium else obtener_html_basico(url)
             if recursos:
@@ -710,6 +784,7 @@ with col3:
                 if usar_selenium:
                     mostrar_metricas_selenium(recursos)
                 contenido = construir_contenido(url, recursos)
-                with st.spinner("Analizando con Ollama..."):
-                    resultado = analizar_ollama(contenido)
-                mostrar_resultado_json("Resultado Ollama", "Ollama LLaMA3", url, resultado)
+                with st.spinner(f"Analizando con Ollama ({modelo_ollama})..."):
+                    resultado = analizar_ollama(contenido, modelo=modelo_ollama)
+                nombre_modelo = f"Ollama {modelo_ollama}"
+                mostrar_resultado_json(f"Resultado Ollama — {modelo_ollama}", nombre_modelo, url, resultado)
