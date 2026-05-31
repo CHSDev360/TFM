@@ -1,4 +1,3 @@
-
 import streamlit as st
 import requests
 import json
@@ -49,7 +48,6 @@ with st.sidebar:
         placeholder="sk-proj-...",
         help="Obtén tu clave en platform.openai.com"
     )
-
     deepseek_api_key = st.text_input(
         "DeepSeek API Key",
         type="password",
@@ -59,33 +57,129 @@ with st.sidebar:
 
     st.markdown("---")
     st.subheader("🦙 Ollama (local)")
-    
-    MODELOS_OLLAMA = [
-        "llama3",
-        "qwen3.5:4b",
-        "mistral",
-        "gemma3:4b",
-        "phi4-mini",
-        "deepseek-r1:7b",
-    ]
-    
-    modelo_ollama = st.selectbox(
-        "Modelo Ollama",
-        MODELOS_OLLAMA,
-        help="Selecciona el modelo local que quieres usar. Asegúrate de haberlo descargado con 'ollama pull <modelo>'."
-    )
-    
-    st.caption(f"Para descargar el modelo seleccionado:")
-    st.code(f"ollama pull {modelo_ollama}", language="bash")
-    
+    st.caption("Ollama no requiere API key — se ejecuta localmente en tu máquina.")
     st.markdown("---")
-    st.caption("Ollama no requiere API key — se ejecuta localmente.")
+    st.caption("💡 Selecciona el proveedor, modelo e intensidad debajo del campo de URL.")
 
 # ─────────────────────────────────────────────
-# INPUTS
+# DATOS GLOBALES — PROVEEDORES Y NIVELES
+# ─────────────────────────────────────────────
+PROVEEDORES = {
+    "OpenAI": {
+        "icon": "✦",
+        "modelos": {
+            "gpt-4o-mini": {"label": "⚡ GPT-4o mini", "desc": "Rápido y económico. Ideal para webs sencillas."},
+            "gpt-4o":      {"label": "🧠 GPT-4o",      "desc": "Equilibrio velocidad/precisión. Recomendado para la mayoría de casos."},
+            "o4-mini":     {"label": "🔍 o4-mini",      "desc": "Razonamiento compacto. Detecta vulnerabilidades complejas."},
+            "o3":          {"label": "🚀 o3",            "desc": "Máxima capacidad de razonamiento. Análisis profundos y exhaustivos."},
+        }
+    },
+    "DeepSeek": {
+        "icon": "🐋",
+        "modelos": {
+            "deepseek-chat":     {"label": "💬 DeepSeek Chat",     "desc": "Modelo conversacional general. Rápido y eficiente."},
+            "deepseek-reasoner": {"label": "🧠 DeepSeek Reasoner", "desc": "Modelo de razonamiento avanzado. Mayor profundidad de análisis."},
+        }
+    },
+    "Ollama": {
+        "icon": "🦙",
+        "modelos": {
+            "llama3":         {"label": "🦙 Llama 3",         "desc": "Modelo general de Meta. Buen equilibrio rendimiento/calidad."},
+            "qwen3.5:4b":     {"label": "🌐 Qwen 3.5 4B",     "desc": "Modelo compacto de Alibaba. Eficiente en recursos."},
+            "mistral":        {"label": "💨 Mistral",          "desc": "Modelo europeo, rápido y ligero. Buena respuesta general."},
+            "gemma3:4b":      {"label": "💎 Gemma 3 4B",       "desc": "Modelo de Google, optimizado para razonamiento."},
+            "phi4-mini":      {"label": "🔬 Phi-4 Mini",       "desc": "Modelo pequeño de Microsoft con alta capacidad analítica."},
+            "deepseek-r1:7b": {"label": "🧩 DeepSeek R1 7B",  "desc": "Versión local del modelo de razonamiento de DeepSeek."},
+        }
+    },
+}
+
+NIVELES_ESFUERZO = {
+    "low":    {"label": "Low",    "max_tokens": 512,  "icon": "🟢", "desc": "Rápido y superficial. Detecta vulnerabilidades obvias. Bajo costo."},
+    "medium": {"label": "Medium", "max_tokens": 1024, "icon": "🟡", "desc": "Equilibrio profundidad/velocidad. Recomendado para la mayoría."},
+    "high":   {"label": "High",   "max_tokens": 2048, "icon": "🟠", "desc": "Análisis detallado. Explora más vectores de ataque."},
+    "max":    {"label": "Max",    "max_tokens": 4096, "icon": "🔴", "desc": "Exhaustivo. Máxima profundidad. Mayor tiempo y costo."},
+}
+
+# ─────────────────────────────────────────────
+# SESSION STATE — inicialización
+# ─────────────────────────────────────────────
+if "proveedor" not in st.session_state:
+    st.session_state.proveedor = "OpenAI"
+if "nivel_esfuerzo" not in st.session_state:
+    st.session_state.nivel_esfuerzo = "medium"
+
+# ─────────────────────────────────────────────
+# INPUTS — URL
 # ─────────────────────────────────────────────
 url = st.text_input("🌐 Introduce una URL a analizar")
 
+# ─────────────────────────────────────────────
+# SELECTOR DE PROVEEDOR — píldoras
+# ─────────────────────────────────────────────
+st.markdown("**🤖 Proveedor de IA**")
+cols_prov = st.columns(len(PROVEEDORES))
+for col_p, (prov_key, prov_meta) in zip(cols_prov, PROVEEDORES.items()):
+    with col_p:
+        is_active = st.session_state.proveedor == prov_key
+        btn_label = f"{prov_meta['icon']} **{prov_key}**" if is_active else f"{prov_meta['icon']} {prov_key}"
+        if st.button(btn_label, key=f"prov_{prov_key}", use_container_width=True):
+            st.session_state.proveedor = prov_key
+            st.session_state.modelo_seleccionado = list(PROVEEDORES[prov_key]["modelos"].keys())[0]
+            st.rerun()
+
+proveedor_activo = st.session_state.proveedor
+modelos_activos  = PROVEEDORES[proveedor_activo]["modelos"]
+
+# Inicializar/validar modelo seleccionado
+if "modelo_seleccionado" not in st.session_state or \
+   st.session_state.modelo_seleccionado not in modelos_activos:
+    st.session_state.modelo_seleccionado = list(modelos_activos.keys())[0]
+
+# ─────────────────────────────────────────────
+# SELECTOR DE MODELO + INTENSIDAD — fila 2
+# ─────────────────────────────────────────────
+col_model, col_effort = st.columns([1, 1])
+
+with col_model:
+    st.markdown("**📦 Modelo**")
+    modelo_seleccionado = st.selectbox(
+        "Modelo",
+        options=list(modelos_activos.keys()),
+        format_func=lambda k: modelos_activos[k]["label"],
+        index=list(modelos_activos.keys()).index(st.session_state.modelo_seleccionado),
+        key="modelo_seleccionado",
+        label_visibility="collapsed",
+    )
+    info_modelo = modelos_activos[modelo_seleccionado]
+    st.caption(f"ℹ️ {info_modelo['desc']}")
+
+with col_effort:
+    st.markdown("**⚙️ Intensidad de análisis**")
+    cols_pills = st.columns(4)
+    for col_pill, (key, meta) in zip(cols_pills, NIVELES_ESFUERZO.items()):
+        with col_pill:
+            is_active = st.session_state.nivel_esfuerzo == key
+            pill_label = f"**{meta['label']}**" if is_active else meta["label"]
+            if st.button(pill_label, key=f"effort_{key}", help=meta["desc"], use_container_width=True):
+                st.session_state.nivel_esfuerzo = key
+                st.rerun()
+
+    nivel_esfuerzo          = st.session_state.nivel_esfuerzo
+    info_esfuerzo           = NIVELES_ESFUERZO[nivel_esfuerzo]
+    max_tokens_seleccionado = info_esfuerzo["max_tokens"]
+    st.caption(f"{info_esfuerzo['icon']} **{info_esfuerzo['label']}** — {info_esfuerzo['desc']} | `max_tokens: {max_tokens_seleccionado}`")
+
+# Variables finales de configuración
+nivel_esfuerzo          = st.session_state.nivel_esfuerzo
+info_esfuerzo           = NIVELES_ESFUERZO[nivel_esfuerzo]
+max_tokens_seleccionado = info_esfuerzo["max_tokens"]
+
+st.markdown("---")
+
+# ─────────────────────────────────────────────
+# OPCIONES DE EXTRACCIÓN Y GLOSARIO
+# ─────────────────────────────────────────────
 col_modo, col_glosario = st.columns(2)
 with col_modo:
     modo_extraccion = st.radio(
@@ -99,7 +193,6 @@ with col_glosario:
 usar_selenium = modo_extraccion == "Avanzado (Selenium)"
 
 st.markdown("---")
-col1, col2, col3 = st.columns(3)
 
 # ─────────────────────────────────────────────
 # GLOSARIO
@@ -178,12 +271,11 @@ def obtener_html_basico(url):
 # EXTRACCIÓN HTML — AVANZADO (Selenium)
 # ─────────────────────────────────────────────
 def _crear_driver_chrome():
-    """Intenta crear un driver de Chrome con las opciones adecuadas para cada entorno."""
     options = ChromeOptions()
     options.add_argument("--headless=new")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")   # imprescindible en WSL/Docker
+    options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-setuid-sandbox")
     options.add_argument("--remote-debugging-port=0")
     options.add_argument("--window-size=1920,1080")
@@ -194,9 +286,7 @@ def _crear_driver_chrome():
 
 
 def _crear_driver_firefox():
-    """Fallback: Firefox con geckodriver si Chrome no está disponible."""
     from webdriver_manager.firefox import GeckoDriverManager
-
     options = FirefoxOptions()
     options.add_argument("--headless")
     return webdriver.Firefox(
@@ -206,7 +296,6 @@ def _crear_driver_firefox():
 
 
 def _extraer_recursos(driver, url):
-    """Extrae formularios, scripts, endpoints y archivos del driver activo."""
     recursos = {
         "html": driver.page_source,
         "scripts_inline": [],
@@ -216,7 +305,6 @@ def _extraer_recursos(driver, url):
         "archivos": []
     }
 
-    # Scripts inline
     try:
         for script in driver.find_elements(By.TAG_NAME, "script"):
             contenido = script.get_attribute("innerHTML")
@@ -225,7 +313,6 @@ def _extraer_recursos(driver, url):
     except Exception as e:
         st.warning(f"Scripts inline: {e}")
 
-    # Scripts externos
     try:
         for script in driver.find_elements(By.CSS_SELECTOR, "script[src]"):
             src = script.get_attribute("src")
@@ -234,7 +321,6 @@ def _extraer_recursos(driver, url):
     except Exception as e:
         st.warning(f"Scripts externos: {e}")
 
-    # Formularios
     try:
         for form in driver.find_elements(By.TAG_NAME, "form"):
             form_data = {
@@ -246,13 +332,12 @@ def _extraer_recursos(driver, url):
                 form_data["inputs"].append({
                     "name": inp.get_attribute("name"),
                     "type": inp.get_attribute("type"),
-                    "id": inp.get_attribute("id")
+                    "id":   inp.get_attribute("id")
                 })
             recursos["formularios"].append(form_data)
     except Exception as e:
         st.warning(f"Formularios: {e}")
 
-    # Endpoints (links)
     try:
         for link in driver.find_elements(By.TAG_NAME, "a"):
             href = link.get_attribute("href")
@@ -261,7 +346,6 @@ def _extraer_recursos(driver, url):
     except Exception as e:
         st.warning(f"Endpoints: {e}")
 
-    # Endpoints en JS (fetch, axios)
     for script_content in recursos["scripts_inline"]:
         try:
             recursos["endpoints"].update(
@@ -273,7 +357,6 @@ def _extraer_recursos(driver, url):
         except Exception:
             continue
 
-    # Archivos descargables
     try:
         selector = "a[href$='.pdf'], a[href$='.zip'], a[href$='.doc'], a[href$='.xls'], a[href$='.docx'], a[href$='.xlsx']"
         for archivo in driver.find_elements(By.CSS_SELECTOR, selector):
@@ -288,36 +371,27 @@ def _extraer_recursos(driver, url):
 
 
 def obtener_html_selenium(url):
-    """
-    Intenta usar Chrome primero. Si falla, prueba Firefox.
-    Si ambos fallan, muestra instrucciones claras y devuelve None.
-    """
     driver = None
     navegador_usado = None
 
-    # Intentar Chrome
     try:
         driver = _crear_driver_chrome()
         navegador_usado = "Chrome"
     except Exception as e_chrome:
         st.warning(f"⚠️ Chrome no disponible ({type(e_chrome).__name__}). Probando Firefox...")
-        # Intentar Firefox como fallback
         try:
             driver = _crear_driver_firefox()
             navegador_usado = "Firefox"
-        except Exception as e_firefox:
+        except Exception:
             st.error(
                 "❌ **No se pudo iniciar ningún navegador para el modo Selenium.**\n\n"
-                "**Solución en WSL/Linux:** instala Chrome con estos comandos en tu terminal:\n"
+                "**Solución en WSL/Linux:** instala Chrome:\n"
                 "```\n"
                 "wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb\n"
                 "sudo apt install ./google-chrome-stable_current_amd64.deb\n"
                 "```\n"
-                "O instala Firefox:\n"
-                "```\n"
-                "sudo apt install firefox\n"
-                "```\n\n"
-                "Mientras tanto puedes usar el **modo Básico (requests)** que no requiere navegador."
+                "O Firefox: `sudo apt install firefox`\n\n"
+                "Mientras tanto usa el **modo Básico (requests)**."
             )
             return None
 
@@ -329,12 +403,12 @@ def obtener_html_selenium(url):
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
         return _extraer_recursos(driver, url)
-
     except Exception as e:
         st.error(f"❌ Error durante la extracción con Selenium: {e}")
         return None
     finally:
         driver.quit()
+
 
 # ─────────────────────────────────────────────
 # MOSTRAR MÉTRICAS SELENIUM EN UI
@@ -373,7 +447,6 @@ def mostrar_metricas_selenium(recursos):
 # ─────────────────────────────────────────────
 def construir_contenido(url, recursos):
     if not recursos.get("formularios") and not recursos.get("endpoints"):
-        # Modo básico: solo HTML
         return recursos["html"][:3000]
 
     return f"""
@@ -404,7 +477,6 @@ ARCHIVOS DESCARGABLES ({len(recursos['archivos'])}):
 # PROMPTS
 # ─────────────────────────────────────────────
 def crear_prompt_texto(contenido):
-    """Prompt para OpenAI y DeepSeek — respuesta en texto estructurado."""
     return f"""
 Eres un experto en ciberseguridad y pentesting web.
 
@@ -436,7 +508,6 @@ Todas las respuestas deben seguir estrictamente este formato estándar:
 
 
 def crear_prompt_json(contenido):
-    """Prompt — respuesta en JSON estructurado."""
     return f"""
 Analista de seguridad web: detecta vulnerabilidades en el contenido HTML/JS proporcionado.
 
@@ -464,7 +535,7 @@ FORMATO JSON obligatorio:
 ]
 
 REGLAS:
-- Si no hay vulnerabilidades mostrar el siguiente mensaje: No se ha encontrado vulnerabilidades.
+- Si no hay vulnerabilidades mostrar: No se ha encontrado vulnerabilidades.
 - Máximo 8 resultados
 - Solo JSON válido, sin texto adicional
 
@@ -472,43 +543,170 @@ CONTENIDO:
 {contenido}
 """
 
+
 # ─────────────────────────────────────────────
 # FUNCIONES DE ANÁLISIS IA
 # ─────────────────────────────────────────────
-def analizar_api(cliente, modelo, contenido):
+def analizar_api(cliente, modelo, contenido, max_tokens=1024):
     prompt = crear_prompt_texto(contenido)
     response = cliente.chat.completions.create(
         model=modelo,
+        max_tokens=max_tokens,
         messages=[
             {"role": "system", "content": "Experto en seguridad web"},
-            {"role": "user", "content": prompt}
+            {"role": "user",   "content": prompt}
         ]
     )
     return response.choices[0].message.content
 
 
-def analizar_ollama(contenido, modelo="llama3"):
-    prompt = crear_prompt_json(contenido)
-    response = ollama.chat(
-        model=modelo,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response["message"]["content"]
-
-
 # ─────────────────────────────────────────────
-# PARSEAR JSON (respuesta Ollama)
+# PARSEAR JSON — robusto con fallback a texto libre
 # ─────────────────────────────────────────────
 def parsear_resultado_json(resultado):
+    # Intento 1: JSON puro entre [ ]
     try:
         inicio = resultado.find("[")
-        fin = resultado.rfind("]") + 1
-        data = json.loads(resultado[inicio:fin])
-        return pd.DataFrame(data)
-    except Exception as e:
-        st.error(f"⚠️ Error parseando JSON: {e}")
-        st.code(resultado)
-        return pd.DataFrame()
+        fin    = resultado.rfind("]") + 1
+        if inicio != -1 and fin > inicio:
+            data = json.loads(resultado[inicio:fin])
+            if isinstance(data, list) and len(data) > 0:
+                return pd.DataFrame(data)
+    except Exception:
+        pass
+
+    # Intento 2: bloques ```json ... ```
+    try:
+        match = re.search(r'```(?:json)?\s*(\[.*?\])\s*```', resultado, re.DOTALL)
+        if match:
+            data = json.loads(match.group(1))
+            return pd.DataFrame(data)
+    except Exception:
+        pass
+
+    # Intento 3: parseo heurístico de texto libre (cuando el modelo responde en prosa)
+    filas = []
+    PATRONES_VULN = [
+        "SQL Injection", "XSS", "Cross-Site Scripting",
+        "CSRF", "Command Injection", "Directory Traversal", "Broken Access Control"
+    ]
+    MAPA_VULN = {
+        "xss": "XSS (Cross-Site Scripting)",
+        "cross-site scripting": "XSS (Cross-Site Scripting)",
+        "sql injection": "SQL Injection",
+        "csrf": "CSRF",
+        "command injection": "Command Injection",
+        "directory traversal": "Directory Traversal",
+        "broken access control": "Broken Access Control",
+    }
+
+    # Dividir por bloques numerados (1. 2. **)
+    bloques = re.split(r'\n\s*\d+\.\s+\*\*', resultado)
+    if len(bloques) < 2:
+        bloques = re.split(r'\n\s*\d+\.\s+', resultado)
+
+    for bloque in bloques[1:]:  # saltar encabezado
+        vuln_nombre = "Desconocida"
+        nivel       = "sospecha"
+        ubicacion   = "N/A"
+        descripcion = ""
+        evidencia   = ""
+
+        # Nombre de la vulnerabilidad — primera línea del bloque
+        primera_linea = bloque.split("\n")[0].strip().strip("*").strip()
+        for key, val in MAPA_VULN.items():
+            if key in primera_linea.lower():
+                vuln_nombre = val
+                break
+        else:
+            vuln_nombre = primera_linea[:60] if primera_linea else "Desconocida"
+
+        # Nivel
+        if "confirmada" in bloque.lower():
+            nivel = "confirmada"
+        elif "sospecha" in bloque.lower():
+            nivel = "sospecha"
+
+        # Ubicación
+        m = re.search(r'[Uu]bicaci[oó]n[:\s]+(.+)', bloque)
+        if m:
+            ubicacion = m.group(1).strip().split("\n")[0]
+
+        # Descripción
+        m = re.search(r'[Dd]escripci[oó]n[:\s]+(.+?)(?=\n[A-Z]|\nEvidencia|$)', bloque, re.DOTALL)
+        if m:
+            descripcion = m.group(1).strip()[:300]
+        else:
+            # Usar las líneas de texto libre como descripción
+            lineas = [l.strip() for l in bloque.split("\n") if l.strip() and not l.strip().startswith("**")]
+            descripcion = " ".join(lineas[1:3])[:300]
+
+        # Evidencia
+        m = re.search(r'[Ee]videncia[:\s]+`?(.+?)`?(?:\n|$)', bloque)
+        if m:
+            evidencia = m.group(1).strip()[:200]
+        else:
+            # Extraer fragmentos entre backticks
+            fragmentos = re.findall(r'`([^`]+)`', bloque)
+            evidencia  = fragmentos[0][:200] if fragmentos else ""
+
+        if vuln_nombre != "Desconocida" or descripcion:
+            filas.append({
+                "vulnerabilidad": vuln_nombre,
+                "nivel":          nivel,
+                "ubicacion":      ubicacion,
+                "descripcion":    descripcion,
+                "evidencia":      evidencia,
+            })
+
+    if filas:
+        st.info("ℹ️ El modelo respondió en texto libre — se procesó automáticamente.")
+        return pd.DataFrame(filas)
+
+    # Sin resultados parseables → mostrar raw
+    st.warning("⚠️ No se pudo parsear la respuesta. Mostrando resultado en bruto:")
+    st.markdown(resultado)
+    return pd.DataFrame()
+
+
+# ─────────────────────────────────────────────
+# ANÁLISIS OLLAMA — con reintento forzando JSON
+# ─────────────────────────────────────────────
+def analizar_ollama(contenido, modelo="llama3"):
+    prompt_json = crear_prompt_json(contenido)
+
+    # Primer intento normal
+    response = ollama.chat(
+        model=modelo,
+        messages=[{"role": "user", "content": prompt_json}]
+    )
+    resultado = response["message"]["content"]
+
+    # Verificar si ya es JSON válido
+    try:
+        inicio = resultado.find("[")
+        fin    = resultado.rfind("]") + 1
+        if inicio != -1 and fin > inicio:
+            json.loads(resultado[inicio:fin])
+            return resultado  # JSON correcto, devolver directamente
+    except Exception:
+        pass
+
+    # Segundo intento — forzar JSON con mensaje de corrección
+    st.info("🔄 Reintentando con instrucción reforzada para obtener JSON...")
+    response2 = ollama.chat(
+        model=modelo,
+        messages=[
+            {"role": "user",      "content": prompt_json},
+            {"role": "assistant", "content": resultado},
+            {"role": "user",      "content": (
+                "Tu respuesta anterior no estaba en formato JSON válido. "
+                "Responde ÚNICAMENTE con el array JSON, sin texto adicional, "
+                "sin explicaciones, sin markdown. Solo el array [ { ... } ]."
+            )}
+        ]
+    )
+    return response2["message"]["content"]
 
 
 # ─────────────────────────────────────────────
@@ -519,7 +717,7 @@ def mostrar_grid_vulnerabilidades(df):
 
     if not df.empty and "vulnerabilidad" in df.columns:
         for _, row in df.iterrows():
-            v = str(row["vulnerabilidad"])
+            v     = str(row["vulnerabilidad"])
             nivel = str(row.get("nivel", "")).lower()
             for vuln in LISTA_VULNERABILIDADES:
                 if vuln.lower() in v.lower():
@@ -549,106 +747,67 @@ def mostrar_grid_vulnerabilidades(df):
             )
     st.markdown("---")
 
+
 # ─────────────────────────────────────────────
 # GENERAR PDF
 # ─────────────────────────────────────────────
 def generar_pdf(url_analizada, modelo_usado, resultado_texto, con_glosario=False, df_json=None):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4,
-                            rightMargin=2*cm, leftMargin=2*cm,
-                            topMargin=2*cm, bottomMargin=2*cm)
+    doc    = SimpleDocTemplate(buffer, pagesize=A4,
+                               rightMargin=2*cm, leftMargin=2*cm,
+                               topMargin=2*cm,   bottomMargin=2*cm)
     styles = getSampleStyleSheet()
 
-    estilo_titulo = ParagraphStyle("Titulo", parent=styles["Title"], fontSize=20,
-                                   textColor=colors.HexColor("#1a1a2e"), spaceAfter=6, alignment=TA_CENTER)
-    estilo_subtitulo = ParagraphStyle("Subtitulo", parent=styles["Normal"], fontSize=11,
-                                      textColor=colors.HexColor("#555555"), spaceAfter=4, alignment=TA_CENTER)
-    estilo_seccion = ParagraphStyle("Seccion", parent=styles["Heading2"], fontSize=13,
-                                    textColor=colors.HexColor("#16213e"), spaceBefore=14, spaceAfter=6)
-    estilo_cuerpo = ParagraphStyle("Cuerpo", parent=styles["Normal"], fontSize=10,
-                                   leading=16, textColor=colors.HexColor("#222222"), spaceAfter=4)
-    estilo_meta = ParagraphStyle("Meta", parent=styles["Normal"], fontSize=9,
-                                 textColor=colors.HexColor("#777777"), spaceAfter=2)
-    estilo_glosario_titulo = ParagraphStyle("GlosarioTitulo", parent=styles["Heading3"], fontSize=11,
-                                            textColor=colors.HexColor("#16213e"), spaceBefore=10, spaceAfter=3)
-    estilo_glosario_def = ParagraphStyle("GlosarioDef", parent=styles["Normal"], fontSize=9,
-                                         leading=14, textColor=colors.HexColor("#333333"), spaceAfter=2, leftIndent=12)
-    estilo_glosario_ejemplo = ParagraphStyle("GlosarioEjemplo", parent=styles["Normal"], fontSize=9,
-                                             leading=13, textColor=colors.HexColor("#555555"), spaceAfter=6,
-                                             leftIndent=12, fontName="Helvetica-Oblique")
+    estilo_titulo    = ParagraphStyle("Titulo",    parent=styles["Title"],   fontSize=20, textColor=colors.HexColor("#1a1a2e"), spaceAfter=6, alignment=TA_CENTER)
+    estilo_subtitulo = ParagraphStyle("Subtitulo", parent=styles["Normal"],  fontSize=11, textColor=colors.HexColor("#555555"), spaceAfter=4, alignment=TA_CENTER)
+    estilo_seccion   = ParagraphStyle("Seccion",   parent=styles["Heading2"],fontSize=13, textColor=colors.HexColor("#16213e"), spaceBefore=14, spaceAfter=6)
+    estilo_cuerpo    = ParagraphStyle("Cuerpo",    parent=styles["Normal"],  fontSize=10, leading=16, textColor=colors.HexColor("#222222"), spaceAfter=4)
+    estilo_meta      = ParagraphStyle("Meta",      parent=styles["Normal"],  fontSize=9,  textColor=colors.HexColor("#777777"), spaceAfter=2)
+    estilo_glosario_titulo  = ParagraphStyle("GlosarioTitulo",  parent=styles["Heading3"], fontSize=11, textColor=colors.HexColor("#16213e"), spaceBefore=10, spaceAfter=3)
+    estilo_glosario_def     = ParagraphStyle("GlosarioDef",     parent=styles["Normal"],   fontSize=9,  leading=14, textColor=colors.HexColor("#333333"), spaceAfter=2, leftIndent=12)
+    estilo_glosario_ejemplo = ParagraphStyle("GlosarioEjemplo", parent=styles["Normal"],   fontSize=9,  leading=13, textColor=colors.HexColor("#555555"), spaceAfter=6, leftIndent=12, fontName="Helvetica-Oblique")
 
     elementos = []
 
-    # Cabecera
     elementos.append(Paragraph("🔐 AI Web Vulnerability Scanner", estilo_titulo))
     elementos.append(Paragraph("Informe de Análisis de Seguridad Web", estilo_subtitulo))
     elementos.append(Spacer(1, 0.3*cm))
     elementos.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor("#1a1a2e")))
     elementos.append(Spacer(1, 0.4*cm))
 
-    # Metadatos
-    fecha = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    fecha      = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     tabla_meta = Table([
-        ["URL analizada:", url_analizada],
+        ["URL analizada:",      url_analizada],
         ["Modelo IA utilizado:", modelo_usado],
         ["Fecha del análisis:", fecha],
     ], colWidths=[4.5*cm, 13*cm])
     tabla_meta.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#333333")),
-        ("TEXTCOLOR", (1, 0), (1, -1), colors.HexColor("#555555")),
+        ("FONTNAME",      (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTNAME",      (1, 0), (1, -1), "Helvetica"),
+        ("FONTSIZE",      (0, 0), (-1, -1), 9),
+        ("TEXTCOLOR",     (0, 0), (0, -1),  colors.HexColor("#333333")),
+        ("TEXTCOLOR",     (1, 0), (1, -1),  colors.HexColor("#555555")),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING",    (0, 0), (-1, -1), 4),
     ]))
     elementos.append(tabla_meta)
     elementos.append(Spacer(1, 0.4*cm))
     elementos.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#cccccc")))
-
-    # Resultados
     elementos.append(Paragraph("Resultados del Análisis", estilo_seccion))
 
     if df_json is not None and not df_json.empty:
-        # Tabla estructurada para resultados JSON (Ollama)
-        columnas = [c for c in ["vulnerabilidad", "nivel", "ubicacion", "descripcion", "evidencia"] if c in df_json.columns]
+        columnas   = [c for c in ["vulnerabilidad", "nivel", "ubicacion", "descripcion", "evidencia"] if c in df_json.columns]
         encabezados = [c.capitalize() for c in columnas]
+        ANCHO_UTIL  = 482
+        anchos_col  = {"vulnerabilidad": 0.18, "nivel": 0.10, "ubicacion": 0.15, "descripcion": 0.30, "evidencia": 0.27}
+        col_widths  = [ANCHO_UTIL * anchos_col.get(c, 0.2) for c in columnas]
 
-        # Ancho útil: A4 (595pt) - márgenes (2*2cm = 113pt) = 482pt
-        ANCHO_UTIL = 482
+        estilo_celda    = ParagraphStyle("CeldaTabla",   parent=styles["Normal"], fontSize=7, leading=10, wordWrap="CJK")
+        estilo_cabecera = ParagraphStyle("CabeceraTabla",parent=styles["Normal"], fontSize=7, leading=10, textColor=colors.white, fontName="Helvetica-Bold")
 
-        # Anchos proporcionales según el tipo de columna
-        anchos_col = {
-            "vulnerabilidad": 0.18,
-            "nivel":          0.10,
-            "ubicacion":      0.15,
-            "descripcion":    0.30,
-            "evidencia":      0.27,
-        }
-        col_widths = [ANCHO_UTIL * anchos_col.get(c, 0.2) for c in columnas]
-
-        # Estilo de celda con wrap para que el texto no se desborde
-        estilo_celda = ParagraphStyle(
-            "CeldaTabla",
-            parent=styles["Normal"],
-            fontSize=7,
-            leading=10,
-            wordWrap="CJK",
-        )
-        estilo_cabecera = ParagraphStyle(
-            "CabecerTabla",
-            parent=styles["Normal"],
-            fontSize=7,
-            leading=10,
-            textColor=colors.white,
-            fontName="Helvetica-Bold",
-        )
-
-        # Construir filas con Paragraph para que hagan wrap automático
         filas = [[Paragraph(h, estilo_cabecera) for h in encabezados]]
         for _, row in df_json.iterrows():
-            fila = [Paragraph(str(row[c])[:300], estilo_celda) for c in columnas]
-            filas.append(fila)
+            filas.append([Paragraph(str(row[c])[:300], estilo_celda) for c in columnas])
 
         tabla_vuln = Table(filas, colWidths=col_widths, repeatRows=1, hAlign="LEFT")
         tabla_vuln.setStyle(TableStyle([
@@ -663,7 +822,6 @@ def generar_pdf(url_analizada, modelo_usado, resultado_texto, con_glosario=False
         ]))
         elementos.append(tabla_vuln)
     else:
-        # Texto formateado para OpenAI / DeepSeek
         for linea in resultado_texto.split("\n"):
             linea = linea.strip()
             if not linea:
@@ -674,7 +832,6 @@ def generar_pdf(url_analizada, modelo_usado, resultado_texto, con_glosario=False
                 linea = f"<b>{linea}</b>"
             elementos.append(Paragraph(linea, estilo_cuerpo))
 
-    # Glosario opcional
     if con_glosario:
         elementos.append(Spacer(1, 0.6*cm))
         elementos.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#1a1a2e")))
@@ -689,7 +846,6 @@ def generar_pdf(url_analizada, modelo_usado, resultado_texto, con_glosario=False
             elementos.append(Paragraph(f"Ejemplo: {ejemplo}", estilo_glosario_ejemplo))
             elementos.append(HRFlowable(width="100%", thickness=0.3, color=colors.HexColor("#dddddd")))
 
-    # Pie
     elementos.append(Spacer(1, 0.6*cm))
     elementos.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#cccccc")))
     elementos.append(Spacer(1, 0.2*cm))
@@ -703,19 +859,16 @@ def generar_pdf(url_analizada, modelo_usado, resultado_texto, con_glosario=False
 
 
 # ─────────────────────────────────────────────
-# MOSTRAR RESULTADO TEXTO + BOTÓN PDF
+# MOSTRAR RESULTADOS
 # ─────────────────────────────────────────────
 def mostrar_resultado_texto(titulo, modelo_usado, url_analizada, resultado):
     st.subheader(titulo)
     st.write(resultado)
-    pdf = generar_pdf(url_analizada, modelo_usado, resultado, con_glosario=incluir_glosario)
+    pdf    = generar_pdf(url_analizada, modelo_usado, resultado, con_glosario=incluir_glosario)
     nombre = f"informe_{modelo_usado.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     st.download_button("📄 Descargar informe PDF", data=pdf, file_name=nombre, mime="application/pdf")
 
 
-# ─────────────────────────────────────────────
-# MOSTRAR RESULTADO JSON + GRID + BOTONES
-# ─────────────────────────────────────────────
 def mostrar_resultado_json(titulo, modelo_usado, url_analizada, resultado_raw):
     st.subheader(titulo)
     df = parsear_resultado_json(resultado_raw)
@@ -729,62 +882,73 @@ def mostrar_resultado_json(titulo, modelo_usado, url_analizada, resultado_raw):
         st.download_button("⬇️ Descargar CSV", df.to_csv(index=False),
                            "vulnerabilidades.csv", "text/csv")
 
-    pdf = generar_pdf(url_analizada, modelo_usado, resultado_raw,
-                      con_glosario=incluir_glosario, df_json=df)
+    pdf    = generar_pdf(url_analizada, modelo_usado, resultado_raw,
+                         con_glosario=incluir_glosario, df_json=df)
     nombre = f"informe_{modelo_usado.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
     st.download_button("📄 Descargar informe PDF", data=pdf, file_name=nombre, mime="application/pdf")
 
-# ─────────────────────────────────────────────
-# BOTONES DE ANÁLISIS
-# ─────────────────────────────────────────────
-with col1:
-    if st.button("Analizar con OpenAI"):
-        if not url.strip():
-            st.warning("❗ Por favor, introduce un enlace web válido")
-        elif not openai_api_key.strip():
-            st.warning("🔑 Introduce tu OpenAI API Key en la barra lateral para usar este modelo.")
-        else:
-            openai_client = OpenAI(api_key=openai_api_key.strip())
-            with st.spinner("Extrayendo contenido..."):
-                recursos = obtener_html_selenium(url) if usar_selenium else obtener_html_basico(url)
-            if recursos:
-                if usar_selenium:
-                    mostrar_metricas_selenium(recursos)
-                contenido = construir_contenido(url, recursos)
-                with st.spinner("Analizando con OpenAI..."):
-                    resultado = analizar_api(openai_client, "gpt-4o-mini", contenido)
-                mostrar_resultado_texto("Resultado OpenAI", "OpenAI GPT-4o-mini", url, resultado)
 
-with col2:
-    if st.button("Analizar con DeepSeek"):
-        if not url.strip():
-            st.warning("❗ Por favor, introduce un enlace web válido")
-        elif not deepseek_api_key.strip():
-            st.warning("🔑 Introduce tu DeepSeek API Key en la barra lateral para usar este modelo.")
-        else:
-            deepseek_client = OpenAI(api_key=deepseek_api_key.strip(), base_url="https://api.deepseek.com")
-            with st.spinner("Extrayendo contenido..."):
-                recursos = obtener_html_selenium(url) if usar_selenium else obtener_html_basico(url)
-            if recursos:
-                if usar_selenium:
-                    mostrar_metricas_selenium(recursos)
-                contenido = construir_contenido(url, recursos)
-                with st.spinner("Analizando con DeepSeek..."):
-                    resultado = analizar_api(deepseek_client, "deepseek-chat", contenido)
-                mostrar_resultado_texto("Resultado DeepSeek", "DeepSeek Chat", url, resultado)
+# ─────────────────────────────────────────────
+# BOTÓN ÚNICO DE ANÁLISIS
+# ─────────────────────────────────────────────
+prov_icon    = PROVEEDORES[proveedor_activo]["icon"]
+btn_analizar = f"🔍 Analizar con {prov_icon} {proveedor_activo} — {info_modelo['label']}"
 
-with col3:
-    if st.button("Analizar con Ollama (local)"):
-        if not url.strip():
-            st.warning("❗ Por favor, introduce un enlace web válido")
-        else:
-            with st.spinner("Extrayendo contenido..."):
-                recursos = obtener_html_selenium(url) if usar_selenium else obtener_html_basico(url)
-            if recursos:
-                if usar_selenium:
-                    mostrar_metricas_selenium(recursos)
-                contenido = construir_contenido(url, recursos)
-                with st.spinner(f"Analizando con Ollama ({modelo_ollama})..."):
-                    resultado = analizar_ollama(contenido, modelo=modelo_ollama)
-                nombre_modelo = f"Ollama {modelo_ollama}"
-                mostrar_resultado_json(f"Resultado Ollama — {modelo_ollama}", nombre_modelo, url, resultado)
+if st.button(btn_analizar, type="primary", use_container_width=True):
+
+    # ── Validaciones ──────────────────────────────────
+    if not url.strip():
+        st.warning("❗ Por favor, introduce una URL válida.")
+        st.stop()
+
+    if proveedor_activo == "OpenAI" and not openai_api_key.strip():
+        st.warning("🔑 Introduce tu OpenAI API Key en la barra lateral.")
+        st.stop()
+
+    if proveedor_activo == "DeepSeek" and not deepseek_api_key.strip():
+        st.warning("🔑 Introduce tu DeepSeek API Key en la barra lateral.")
+        st.stop()
+
+    # ── Extracción de contenido ───────────────────────
+    with st.spinner("🌐 Extrayendo contenido de la web..."):
+        recursos = obtener_html_selenium(url) if usar_selenium else obtener_html_basico(url)
+
+    if not recursos:
+        st.stop()
+
+    if usar_selenium:
+        mostrar_metricas_selenium(recursos)
+
+    contenido = construir_contenido(url, recursos)
+
+    # ── Análisis según proveedor ──────────────────────
+    if proveedor_activo == "OpenAI":
+        with st.spinner(f"🤖 Analizando con {info_modelo['label']} · intensidad {info_esfuerzo['label']}..."):
+            cliente   = OpenAI(api_key=openai_api_key.strip())
+            resultado = analizar_api(cliente, modelo_seleccionado, contenido,
+                                     max_tokens=max_tokens_seleccionado)
+        mostrar_resultado_texto(
+            f"Resultado — {info_modelo['label']} ({info_esfuerzo['label']})",
+            f"OpenAI {info_modelo['label']} · {info_esfuerzo['label']}",
+            url, resultado
+        )
+
+    elif proveedor_activo == "DeepSeek":
+        with st.spinner(f"🐋 Analizando con {info_modelo['label']} · intensidad {info_esfuerzo['label']}..."):
+            cliente   = OpenAI(api_key=deepseek_api_key.strip(), base_url="https://api.deepseek.com")
+            resultado = analizar_api(cliente, modelo_seleccionado, contenido,
+                                     max_tokens=max_tokens_seleccionado)
+        mostrar_resultado_texto(
+            f"Resultado — {info_modelo['label']} ({info_esfuerzo['label']})",
+            f"DeepSeek {info_modelo['label']} · {info_esfuerzo['label']}",
+            url, resultado
+        )
+
+    elif proveedor_activo == "Ollama":
+        with st.spinner(f"🦙 Analizando localmente con {info_modelo['label']}..."):
+            resultado = analizar_ollama(contenido, modelo=modelo_seleccionado)
+        mostrar_resultado_json(
+            f"Resultado — {info_modelo['label']}",
+            f"Ollama {info_modelo['label']}",
+            url, resultado
+        )
