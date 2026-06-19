@@ -1,4 +1,3 @@
-
 import streamlit as st
 import requests
 import json
@@ -30,29 +29,33 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable, Table, TableStyle
 from reportlab.lib.enums import TA_CENTER
 
+from pathlib import Path
+
+# queries
+from sql_queries import (
+    CREATE_FEEDBACK_TABLE,
+    INSERT_FEEDBACK,
+    SELECT_FEEDBACK,
+    DELETE_FEEDBACK
+)
+
 # ─────────────────────────────────────────────
 # BASE DE DATOS — FEEDBACK
 # ─────────────────────────────────────────────
-DB_PATH = "feedback.db"
+
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = BASE_DIR / "data" / "feedback.db"
 
 def init_db():
     with sqlite3.connect(DB_PATH) as con:
-        con.execute("""
-            CREATE TABLE IF NOT EXISTS feedback (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre     TEXT,
-                valoracion INTEGER NOT NULL,
-                comentario TEXT NOT NULL,
-                fecha      TEXT NOT NULL
-            )
-        """)
+        con.execute(CREATE_FEEDBACK_TABLE)
         con.commit()
 
 def guardar_feedback(nombre, valoracion, comentario):
     fecha = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     with sqlite3.connect(DB_PATH) as con:
         con.execute(
-            "INSERT INTO feedback (nombre, valoracion, comentario, fecha) VALUES (?, ?, ?, ?)",
+            INSERT_FEEDBACK,
             (nombre.strip() or "Anónimo", valoracion, comentario.strip(), fecha)
         )
         con.commit()
@@ -60,14 +63,14 @@ def guardar_feedback(nombre, valoracion, comentario):
 def cargar_feedback():
     with sqlite3.connect(DB_PATH) as con:
         df = pd.read_sql_query(
-            "SELECT id, nombre, valoracion, comentario, fecha FROM feedback ORDER BY id DESC",
+            SELECT_FEEDBACK,
             con
         )
     return df
 
 def borrar_feedback(feedback_id):
     with sqlite3.connect(DB_PATH) as con:
-        con.execute("DELETE FROM feedback WHERE id = ?", (feedback_id,))
+        con.execute(DELETE_FEEDBACK, (feedback_id,))
         con.commit()
 
 init_db()
